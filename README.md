@@ -155,36 +155,28 @@ When making requests to the MCP server, you can include the following options:
   "version": "beta",             // Optional: API version (default: beta)
   "queryParams": {},             // Optional: Query parameters
   "body": {},                    // Optional: Request body for POST/PUT/PATCH
-  "allData": false,              // Optional: Auto-pagination (default: false)
-  "useConsistencyLevel": false   // Optional: Add consistencyLevel (default: false)
+  "allData": false               // Optional: Auto-pagination (default: false)
 }
 ```
 
-### About the consistencyLevel Parameter
+### Important Note About consistencyLevel
 
-The `consistencyLevel` parameter is now **explicitly opt-in only**. By default, it is **not** added to requests.
+After testing, we've found that the `consistencyLevel` parameter is generally not supported in many Graph API configurations. We've removed it from all default requests to ensure maximum compatibility.
 
-To use it with endpoints that support it (mainly directory objects like users and groups), you must explicitly set `useConsistencyLevel: true` in your request:
+If you need to use this parameter in your specific environment (for certain advanced directory query scenarios), you can manually add it to the queryParams:
 
 ```json
 {
   "endpoint": "/users",
   "method": "GET",
-  "useConsistencyLevel": true
+  "queryParams": {
+    "$top": 5,
+    "consistencyLevel": "eventual"
+  }
 }
 ```
 
-Endpoints that typically support consistencyLevel:
-- `/users` (User directory objects)
-- `/groups` (Group directory objects)
-- `/directory` (Directory objects)
-- Endpoints with `/members` or `/owners`
-
-Endpoints that typically don't support consistencyLevel:
-- `/me/drive` (OneDrive)  
-- `/sites` (SharePoint)
-- `/communications` (Teams)
-- `/planner` (Planner)
+However, we recommend testing carefully before using this parameter, as it can cause errors in many environments.
 
 ## JSON Format Requirements
 
@@ -248,8 +240,8 @@ To get your AZURE_CLIENT_ID and AZURE_CLIENT_SECRET:
    - Check the request format in test-client.js for examples
 
 3. **Graph API Errors**
-   - "Unrecognized query argument: consistencyLevel" - This indicates the endpoint doesn't support the consistencyLevel parameter. The parameter is now off by default, but if you're explicitly enabling it with `useConsistencyLevel: true`, don't use it with this endpoint.
-   - Check permissions in Azure AD
+   - "Unrecognized query argument: consistencyLevel" - This error indicates that your Graph API configuration doesn't support this parameter. We've removed it from all examples and default behavior.
+   - Check permissions in Azure AD - make sure your application has the correct scopes granted
    - Verify request format and parameters
    - Look for rate limiting issues
 
