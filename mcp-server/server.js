@@ -89,10 +89,6 @@ const graphService = {
     const queryParams = options.queryParams || {};
     const allData = options.allData || false;
     
-    // IMPORTANT: consistencyLevel parameter is now EXPLICITLY opt-in only
-    // Only add if the option is explicitly set to true
-    const useConsistencyLevel = options.useConsistencyLevel === true;
-    
     // Validate method
     const validMethods = ['GET', 'POST', 'PUT', 'PATCH'];
     if (!validMethods.includes(method)) {
@@ -114,16 +110,8 @@ const graphService = {
       let baseUrl = `https://graph.microsoft.com/${version}`;
       let endpoint = options.endpoint.startsWith('/') ? options.endpoint : `/${options.endpoint}`;
       
-      // Copy query parameters to avoid modifying the original
-      const paramsToUse = { ...queryParams };
-      
-      // Only add consistencyLevel if explicitly requested
-      if (useConsistencyLevel) {
-        paramsToUse['consistencyLevel'] = 'eventual';
-      }
-      
       // Convert query parameters to URL string
-      const queryString = Object.entries(paramsToUse)
+      const queryString = Object.entries(queryParams)
         .map(([key, value]) => {
           // Safely encode values, handling different types
           const encodedValue = typeof value === 'object' ? 
@@ -285,7 +273,7 @@ app.post('/api/graph', async (req, res) => {
       });
     }
     
-    const { endpoint, method, version, body, queryParams, allData, useConsistencyLevel } = req.body;
+    const { endpoint, method, version, body, queryParams, allData } = req.body;
     
     // Check permission for this endpoint
     const requiredPermission = req.mcpContext.getPermissionForEndpoint(endpoint, method);
@@ -303,8 +291,7 @@ app.post('/api/graph', async (req, res) => {
       version,
       body,
       queryParams,
-      allData,
-      useConsistencyLevel
+      allData
     });
     
     // Return result
