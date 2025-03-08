@@ -88,7 +88,10 @@ const graphService = {
     const body = options.body || null;
     const queryParams = options.queryParams || {};
     const allData = options.allData || false;
-    const useConsistencyLevel = options.useConsistencyLevel !== false; // Default to true unless explicitly set to false
+    
+    // IMPORTANT: consistencyLevel parameter is now EXPLICITLY opt-in only
+    // Only add if the option is explicitly set to true
+    const useConsistencyLevel = options.useConsistencyLevel === true;
     
     // Validate method
     const validMethods = ['GET', 'POST', 'PUT', 'PATCH'];
@@ -111,22 +114,11 @@ const graphService = {
       let baseUrl = `https://graph.microsoft.com/${version}`;
       let endpoint = options.endpoint.startsWith('/') ? options.endpoint : `/${options.endpoint}`;
       
-      // Add consistencyLevel=eventual to requests that support it (mainly directory objects like users, groups)
-      // Only add if useConsistencyLevel is not explicitly disabled
+      // Copy query parameters to avoid modifying the original
       const paramsToUse = { ...queryParams };
       
-      // Check if the endpoint likely supports consistencyLevel
-      // Only for certain endpoints that support directory object queries
-      const supportsConsistencyLevel = (
-        endpoint.startsWith('/users') || 
-        endpoint.startsWith('/groups') || 
-        endpoint.startsWith('/directory') ||
-        endpoint.startsWith('/deviceManagement') ||
-        endpoint.includes('/members') ||
-        endpoint.includes('/owners')
-      );
-      
-      if (useConsistencyLevel && supportsConsistencyLevel) {
+      // Only add consistencyLevel if explicitly requested
+      if (useConsistencyLevel) {
         paramsToUse['consistencyLevel'] = 'eventual';
       }
       
