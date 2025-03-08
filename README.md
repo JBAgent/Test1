@@ -31,6 +31,10 @@ This repository provides a complete solution for integrating Claude with a Model
 
 5. **Test the MCP server**
    ```bash
+   # Using the provided test client
+   node test-client.js
+   
+   # Or using curl
    curl -X POST http://localhost:3000/api/graph \
      -H "Content-Type: application/json" \
      -H "X-User-ID: default-user" \
@@ -87,6 +91,7 @@ This repository provides a complete solution for integrating Claude with a Model
 Test1/
 ├── mcp-server/               # MCP Server for Microsoft Graph API
 │   ├── server.js             # Main server implementation
+│   ├── test-client.js        # Test client for verification
 │   ├── package.json          # Dependencies
 │   ├── Dockerfile            # Container configuration
 │   └── .env.example          # Example environment variables
@@ -109,6 +114,7 @@ AZURE_TENANT_ID=your-tenant-id
 AZURE_CLIENT_ID=your-client-id
 AZURE_CLIENT_SECRET=your-client-secret
 PORT=3000
+NODE_ENV=development         # Set to 'production' in production
 ```
 
 ### Claude Application (.env)
@@ -138,6 +144,37 @@ PORT=4000
   - Specialized endpoint for organizational analysis
   - Simplifies asking questions about the organization
 
+## JSON Format Requirements
+
+When making requests to the MCP server, ensure your JSON is properly formatted:
+
+1. **Use double quotes for keys and string values**:
+   ```json
+   {"endpoint": "/users", "method": "GET"}
+   ```
+
+2. **Don't nest JSON strings improperly**:
+   ```json
+   {"queryParams": {"$filter": "displayName eq 'John'"}}
+   ```
+
+3. **Use proper JSON types**:
+   ```json
+   {"allData": true, "count": 10}
+   ```
+
+## Getting Microsoft Azure Credentials
+
+To get your AZURE_CLIENT_ID and AZURE_CLIENT_SECRET:
+
+1. Sign in to the [Azure Portal](https://portal.azure.com)
+2. Navigate to Azure Active Directory > App registrations
+3. Create a new registration or use an existing one
+4. Copy the Application (client) ID - this is your AZURE_CLIENT_ID
+5. Go to Certificates & secrets > New client secret
+6. Create a new secret and copy the value - this is your AZURE_CLIENT_SECRET
+7. Under API permissions, add Microsoft Graph permissions
+
 ## Security Considerations
 
 1. **Authentication**
@@ -161,12 +198,18 @@ PORT=4000
 1. **MCP Server Connection Issues**
    - Verify Azure AD credentials
    - Check network connectivity
+   - Use the provided test-client.js to verify connections
 
-2. **Claude API Errors**
+2. **JSON Parsing Errors**
+   - Ensure requests use valid JSON with double quotes
+   - Don't send single-quoted strings or improperly escaped characters
+   - Check the request format in test-client.js for examples
+
+3. **Claude API Errors**
    - Validate Anthropic API key
    - Ensure request format is correct
 
-3. **Graph API Errors**
+4. **Graph API Errors**
    - Check permissions in Azure AD
    - Verify request format and parameters
    - Look for rate limiting issues
