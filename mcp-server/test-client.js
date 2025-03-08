@@ -14,7 +14,12 @@ const USER_ID = 'test-user';
 // Example requests to test
 const examples = [
   {
-    name: 'Basic Users Query',
+    name: 'Health Check',
+    path: '/health',
+    method: 'GET'
+  },
+  {
+    name: 'Basic Users Query (supports consistencyLevel)',
     request: {
       endpoint: '/users',
       method: 'GET',
@@ -25,7 +30,7 @@ const examples = [
     }
   },
   {
-    name: 'Query with Filter',
+    name: 'User Query with Filter (supports consistencyLevel)',
     request: {
       endpoint: '/users',
       method: 'GET',
@@ -37,9 +42,24 @@ const examples = [
     }
   },
   {
-    name: 'Health Check',
-    path: '/health',
-    method: 'GET'
+    name: 'SharePoint Sites Query (no consistencyLevel)',
+    request: {
+      endpoint: '/sites',
+      method: 'GET',
+      queryParams: {
+        '$top': 5
+      },
+      allData: false,
+      useConsistencyLevel: false  // Explicitly disable for endpoints that don't support it
+    }
+  },
+  {
+    name: 'OneDrive API Query (no consistencyLevel)',
+    request: {
+      endpoint: '/me/drive',
+      method: 'GET',
+      useConsistencyLevel: false
+    }
   }
 ];
 
@@ -94,6 +114,8 @@ async function callMCPServer(example) {
 // Run all example tests
 async function runTests() {
   console.log('Starting MCP Server test client...');
+  console.log('Note: If you see 401 errors, make sure you have set up your Azure credentials');
+  console.log('Note: Some examples may fail if you do not have appropriate permissions');
   
   // Test health endpoint first
   const healthExample = examples.find(ex => ex.path === '/health');
