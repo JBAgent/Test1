@@ -144,6 +144,42 @@ PORT=4000
   - Specialized endpoint for organizational analysis
   - Simplifies asking questions about the organization
 
+## Graph API Request Options
+
+When making requests to the MCP server, you can include the following options:
+
+```json
+{
+  "endpoint": "/users",          // Required: Graph API endpoint
+  "method": "GET",               // Optional: HTTP method (default: GET)
+  "version": "beta",             // Optional: API version (default: beta)
+  "queryParams": {},             // Optional: Query parameters
+  "body": {},                    // Optional: Request body for POST/PUT/PATCH
+  "allData": false,              // Optional: Auto-pagination (default: false)
+  "useConsistencyLevel": true    // Optional: Add consistencyLevel (default: true)
+}
+```
+
+### About the consistencyLevel Parameter
+
+Not all Microsoft Graph endpoints support the `consistencyLevel` parameter. The MCP server intelligently adds this parameter only to endpoints that likely support it (mainly directory object queries like `/users` and `/groups`).
+
+If you encounter a 400 Bad Request error mentioning "Unrecognized query argument: consistencyLevel", you can disable this parameter by setting `useConsistencyLevel: false` in your request:
+
+```json
+{
+  "endpoint": "/sites",
+  "method": "GET",
+  "useConsistencyLevel": false
+}
+```
+
+Endpoints that typically don't support consistencyLevel:
+- `/me/drive` (OneDrive)  
+- `/sites` (SharePoint)
+- `/communications` (Teams)
+- `/planner` (Planner)
+
 ## JSON Format Requirements
 
 When making requests to the MCP server, ensure your JSON is properly formatted:
@@ -205,14 +241,15 @@ To get your AZURE_CLIENT_ID and AZURE_CLIENT_SECRET:
    - Don't send single-quoted strings or improperly escaped characters
    - Check the request format in test-client.js for examples
 
-3. **Claude API Errors**
-   - Validate Anthropic API key
-   - Ensure request format is correct
-
-4. **Graph API Errors**
+3. **Graph API Errors**
+   - "Unrecognized query argument: consistencyLevel" - use `useConsistencyLevel: false`
    - Check permissions in Azure AD
    - Verify request format and parameters
    - Look for rate limiting issues
+
+4. **Claude API Errors**
+   - Validate Anthropic API key
+   - Ensure request format is correct
 
 ## Contributing
 
