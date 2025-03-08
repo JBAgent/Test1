@@ -156,23 +156,29 @@ When making requests to the MCP server, you can include the following options:
   "queryParams": {},             // Optional: Query parameters
   "body": {},                    // Optional: Request body for POST/PUT/PATCH
   "allData": false,              // Optional: Auto-pagination (default: false)
-  "useConsistencyLevel": true    // Optional: Add consistencyLevel (default: true)
+  "useConsistencyLevel": false   // Optional: Add consistencyLevel (default: false)
 }
 ```
 
 ### About the consistencyLevel Parameter
 
-Not all Microsoft Graph endpoints support the `consistencyLevel` parameter. The MCP server intelligently adds this parameter only to endpoints that likely support it (mainly directory object queries like `/users` and `/groups`).
+The `consistencyLevel` parameter is now **explicitly opt-in only**. By default, it is **not** added to requests.
 
-If you encounter a 400 Bad Request error mentioning "Unrecognized query argument: consistencyLevel", you can disable this parameter by setting `useConsistencyLevel: false` in your request:
+To use it with endpoints that support it (mainly directory objects like users and groups), you must explicitly set `useConsistencyLevel: true` in your request:
 
 ```json
 {
-  "endpoint": "/sites",
+  "endpoint": "/users",
   "method": "GET",
-  "useConsistencyLevel": false
+  "useConsistencyLevel": true
 }
 ```
+
+Endpoints that typically support consistencyLevel:
+- `/users` (User directory objects)
+- `/groups` (Group directory objects)
+- `/directory` (Directory objects)
+- Endpoints with `/members` or `/owners`
 
 Endpoints that typically don't support consistencyLevel:
 - `/me/drive` (OneDrive)  
@@ -242,7 +248,7 @@ To get your AZURE_CLIENT_ID and AZURE_CLIENT_SECRET:
    - Check the request format in test-client.js for examples
 
 3. **Graph API Errors**
-   - "Unrecognized query argument: consistencyLevel" - use `useConsistencyLevel: false`
+   - "Unrecognized query argument: consistencyLevel" - This indicates the endpoint doesn't support the consistencyLevel parameter. The parameter is now off by default, but if you're explicitly enabling it with `useConsistencyLevel: true`, don't use it with this endpoint.
    - Check permissions in Azure AD
    - Verify request format and parameters
    - Look for rate limiting issues
