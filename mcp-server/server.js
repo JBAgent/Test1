@@ -15,7 +15,39 @@ require('dotenv').config();
 // Initialize express app
 const app = express();
 app.use(cors());
-app.use(bodyParser.json());
+
+// Configure body parser with more robust error handling
+app.use(bodyParser.json({
+  strict: false,
+  limit: '10mb',
+  reviver: (key, value) => {
+    // Custom JSON parsing logic if needed
+    return value;
+  }
+}));
+
+// Error handler for JSON parsing errors
+app.use((err, req, res, next) => {
+  if (err instanceof SyntaxError && err.status === 400 && 'body' in err) {
+    console.error('JSON parsing error:', err.message);
+    return res.status(400).json({ 
+      error: 'Bad Request', 
+      message: 'Invalid JSON format in request body. Please check that your request uses valid JSON with double quotes.' 
+    });
+  }
+  next(err);
+});
+
+// Request logger for debugging
+if (process.env.NODE_ENV !== 'production') {
+  app.use((req, res, next) => {
+    if (req.method === 'POST' && req.path === '/api/graph') {
+      console.log('Request headers:', req.headers);
+      console.log('Parsed request body:', JSON.stringify(req.body, null, 2));
+    }
+    next();
+  });
+}
 
 // ==========================================
 // MSAL Configuration for authentication
@@ -83,7 +115,13 @@ const graphService = {
       
       // Convert query parameters to URL string
       const queryString = Object.entries(queryParams)
-        .map(([key, value]) => `${encodeURIComponent(key)}=${encodeURIComponent(value)}`)
+        .map(([key, value]) => {
+          // Safely encode values, handling different types
+          const encodedValue = typeof value === 'object' ? 
+            encodeURIComponent(JSON.stringify(value)) : 
+            encodeURIComponent(String(value));
+          return `${encodeURIComponent(key)}=${encodedValue}`;
+        })
         .join('&');
       
       let url = `${baseUrl}${endpoint}${queryString ? '?' + queryString : ''}`;
@@ -101,11 +139,13 @@ const graphService = {
       // Add body for POST, PUT, PATCH requests
       if (['POST', 'PUT', 'PATCH'].includes(method) && body) {
         fetchOptions.headers['Content-Type'] = 'application/json';
-        fetchOptions.body = JSON.stringify(body);
+        // Ensure body is properly stringified if it's an object
+        fetchOptions.body = typeof body === 'object' ? JSON.stringify(body) : body;
       }
       
       // Function to make a single request
       async function makeRequest(requestUrl) {
+        console.log(`Making request to: ${requestUrl}`);
         const response = await fetch(requestUrl, fetchOptions);
         
         if (!response.ok) {
@@ -228,6 +268,14 @@ app.use(async (req, res, next) => {
 // Main Graph API endpoint
 app.post('/api/graph', async (req, res) => {
   try {
+    // Check for required fields
+    if (!req.body || !req.body.endpoint) {
+      return res.status(400).json({
+        error: 'Bad Request',
+        message: 'Missing required fields. "endpoint" is required.'
+      });
+    }
+    
     const { endpoint, method, version, body, queryParams, allData } = req.body;
     
     // Check permission for this endpoint
@@ -252,6 +300,7 @@ app.post('/api/graph', async (req, res) => {
     // Return result
     res.json(result);
   } catch (error) {
+    console.error('Error handling /api/graph request:', error);
     res.status(500).json({ 
       error: 'Graph API Error', 
       message: error.message 
@@ -262,6 +311,17 @@ app.post('/api/graph', async (req, res) => {
 // Health check endpoint
 app.get('/health', (req, res) => {
   res.json({ status: 'ok', version: '1.0.0' });
+});
+
+// Catch-all error handler
+app.use((err, req, res, next) => {
+  console.error('Unhandled error:', err);
+  res.status(500).json({
+    error: 'Server Error',
+    message: process.env.NODE_ENV === 'production' ? 
+      'An unexpected error occurred' : 
+      err.message
+  });
 });
 
 // ==========================================
