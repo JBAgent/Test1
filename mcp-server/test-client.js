@@ -19,7 +19,7 @@ const examples = [
     method: 'GET'
   },
   {
-    name: 'Basic Users Query (without consistencyLevel)',
+    name: 'Basic Users Query',
     request: {
       endpoint: '/users',
       method: 'GET',
@@ -27,11 +27,11 @@ const examples = [
         '$top': 5
       },
       allData: false
-      // No consistencyLevel by default
+      // No consistencyLevel parameter
     }
   },
   {
-    name: 'Users Query with consistencyLevel explicitly enabled',
+    name: 'Users Query with Select Fields',
     request: {
       endpoint: '/users',
       method: 'GET',
@@ -39,8 +39,8 @@ const examples = [
         '$top': 5,
         '$select': 'id,displayName,mail'
       },
-      allData: false,
-      useConsistencyLevel: true // Explicitly opt-in
+      allData: false
+      // No consistencyLevel parameter
     }
   },
   {
@@ -52,15 +52,13 @@ const examples = [
         '$top': 5
       },
       allData: false
-      // No consistencyLevel by default
     }
   },
   {
-    name: 'OneDrive API Query',
+    name: 'OneDrive API Query (if you have permission)',
     request: {
       endpoint: '/me/drive',
       method: 'GET'
-      // No consistencyLevel by default
     }
   }
 ];
@@ -116,9 +114,9 @@ async function callMCPServer(example) {
 // Run all example tests
 async function runTests() {
   console.log('Starting MCP Server test client...');
-  console.log('Note: If you see 401 errors, make sure you have set up your Azure credentials');
+  console.log('Note: If you see 401 errors, make sure you have set up your Azure AD credentials');
   console.log('Note: Some examples may fail if you do not have appropriate permissions');
-  console.log('Note: The consistencyLevel parameter is now opt-in only (useConsistencyLevel: true)');
+  console.log('Note: ConsistencyLevel parameter has been removed from all examples due to compatibility issues');
   
   // Test health endpoint first
   const healthExample = examples.find(ex => ex.path === '/health');
