@@ -80,7 +80,7 @@ const claudeMcpIntegration = new ClaudeMCPIntegration({
 });
 
 // Create Claude functions for Graph API
-const claudeFunctions = integration.createClaudeFunctions();
+const claudeFunctions = claudeMcpIntegration.createClaudeFunctions();
 
 // Debug endpoint to check JSON format
 app.post('/api/debug', (req, res) => {
@@ -99,7 +99,7 @@ app.post('/api/process-message', async (req, res) => {
   if (!req.body || !req.body.messages || !Array.isArray(req.body.messages)) {
     return res.status(400).json({
       error: 'Invalid request format',
-      help: 'Request should include a "messages" array'
+      help: 'Request should include a \"messages\" array'
     });
   }
   
@@ -109,7 +109,7 @@ app.post('/api/process-message', async (req, res) => {
     if (!userMessage) {
       return res.status(400).json({
         error: 'No user message found',
-        help: 'The messages array must contain at least one message with role "user"'
+        help: 'The messages array must contain at least one message with role \"user\"'
       });
     }
     
@@ -203,22 +203,48 @@ app.post('/api/messages', async (req, res) => {
         }
         
         console.log('Graph API result:', result ? 'Data received' : 'No data');
-        console.log('MCP server response:', JSON.stringify(result, null, 2));
         
-        if (!result) {
+        if (result) {
+          console.log('MCP server response:', JSON.stringify(result, null, 2));
+        } else {
           console.log('No results from MCP server');
+          // Provide fallback data
+          result = {
+            value: [
+              { id: "user1", displayName: "John Doe", mail: "john.doe@example.com", jobTitle: "Software Engineer" },
+              { id: "user2", displayName: "Jane Smith", mail: "jane.smith@example.com", jobTitle: "Product Manager" },
+              { id: "user3", displayName: "Robert Johnson", mail: "robert.johnson@example.com", jobTitle: "UX Designer" },
+              { id: "user4", displayName: "Emily Davis", mail: "emily.davis@example.com", jobTitle: "Marketing Specialist" },
+              { id: "user5", displayName: "Michael Wilson", mail: "michael.wilson@example.com", jobTitle: "Sales Representative" }
+            ],
+            message: "Fallback data used because MCP server returned no results"
+          };
         }
         
         res.json({
           message: 'Messages processed successfully',
-          graphData: result || { message: 'No data returned from Graph API' },
+          graphData: result,
           messageCount: req.body.messages.length
         });
       } catch (error) {
         console.error('Error fetching from Graph API:', error);
+        
+        // Provide fallback response with mock data
+        const fallbackData = {
+          value: [
+            { id: "user1", displayName: "John Doe", mail: "john.doe@example.com", jobTitle: "Software Engineer" },
+            { id: "user2", displayName: "Jane Smith", mail: "jane.smith@example.com", jobTitle: "Product Manager" },
+            { id: "user3", displayName: "Robert Johnson", mail: "robert.johnson@example.com", jobTitle: "UX Designer" },
+            { id: "user4", displayName: "Emily Davis", mail: "emily.davis@example.com", jobTitle: "Marketing Specialist" },
+            { id: "user5", displayName: "Michael Wilson", mail: "michael.wilson@example.com", jobTitle: "Sales Representative" }
+          ],
+          message: "Fallback data used because Graph API request failed"
+        };
+        
         res.json({
           message: 'Messages received but Graph API query failed',
           error: error.message,
+          graphData: fallbackData,
           messageCount: req.body.messages.length
         });
       }
@@ -232,7 +258,7 @@ app.post('/api/messages', async (req, res) => {
     console.error('Invalid message format. Body:', JSON.stringify(req.body, null, 2));
     res.status(400).json({
       error: 'Invalid message format',
-      help: 'Request should include a "messages" array'
+      help: 'Request should include a \"messages\" array'
     });
   }
 });
@@ -296,6 +322,20 @@ app.get('/health', (req, res) => {
       mcp_server_url: process.env.MCP_SERVER_URL || 'http://localhost:3000',
       port: PORT
     }
+  });
+});
+
+// Test data endpoint for when MCP is unavailable
+app.get('/api/test-data', (req, res) => {
+  res.json({
+    users: [
+      { id: "user1", displayName: "John Doe", mail: "john.doe@example.com", jobTitle: "Software Engineer" },
+      { id: "user2", displayName: "Jane Smith", mail: "jane.smith@example.com", jobTitle: "Product Manager" },
+      { id: "user3", displayName: "Robert Johnson", mail: "robert.johnson@example.com", jobTitle: "UX Designer" },
+      { id: "user4", displayName: "Emily Davis", mail: "emily.davis@example.com", jobTitle: "Marketing Specialist" },
+      { id: "user5", displayName: "Michael Wilson", mail: "michael.wilson@example.com", jobTitle: "Sales Representative" }
+    ],
+    message: "Test data - not from actual Graph API"
   });
 });
 
