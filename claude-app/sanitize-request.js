@@ -5,6 +5,8 @@
  * before they reach the Express JSON parser
  */
 
+const { Readable } = require('stream');
+
 /**
  * Convert a potentially invalid JSON string to valid JSON
  * Handles the most common syntax errors:
@@ -100,67 +102,65 @@ function sanitizeJsonString(input) {
 }
 
 /**
- * Simple middleware that captures raw request body for debugging
+ * A simpler middleware approach that doesn't manipulate the stream directly
+ * Instead, it collects the data, sanitizes it, and then passes it to the next middleware
  */
-function captureRawBody(req, res, next) {
-  let data = '';
-  req.on('data', chunk => {
-    data += chunk;
-  });
-  
-  req.on('end', () => {
-    req.rawBody = data;
+function sanitizeRequestBody(req, res, next) {
+  // Only process POST, PUT, PATCH requests with content-type application/json
+  if (
+    (req.method === 'POST' || req.method === 'PUT' || req.method === 'PATCH') &&
+    req.headers['content-type'] && 
+    req.headers['content-type'].includes('application/json')
+  ) {
+    let data = '';
     
-    // If it looks like JSON with single quotes, try to sanitize it
-    if (req.rawBody && 
-        (req.rawBody.trim().startsWith("{") || 
-         req.rawBody.trim().startsWith("'{"))) {
-      try {
-        const sanitized = sanitizeJsonString(req.rawBody);
-        req.sanitizedBody = sanitized;
-      } catch (e) {
-        console.error('Failed to pre-sanitize body:', e.message);
-      }
-    }
-    next();
-  });
-}
-
-/**
- * Express middleware to handle JSON parsing errors by attempting to sanitize the JSON
- */
-function handleJsonParsingErrors(err, req, res, next) {
-  if (err instanceof SyntaxError && err.status === 400 && 'body' in err) {
-    console.error('JSON Parse Error:', err.message);
-    console.error('Raw body:', req.rawBody);
-    
-    // Try to sanitize the raw body
-    if (req.rawBody) {
-      try {
-        const sanitized = sanitizeJsonString(req.rawBody);
-        const data = JSON.parse(sanitized);
-        
-        // If we successfully parsed it, attach it to the request and continue
-        req.body = data;
-        console.log('Successfully sanitized malformed JSON');
-        return next();
-      } catch (e) {
-        console.error('Failed to sanitize JSON:', e.message);
-      }
-    }
-    
-    return res.status(400).json({ 
-      error: 'Invalid JSON in request body',
-      details: err.message,
-      help: 'Ensure all quotes are double quotes (") not single quotes (\') and all property names are quoted'
+    // Collect data chunks
+    req.on('data', chunk => {
+      data += chunk.toString();
     });
+    
+    // Once we have all the data
+    req.on('end', () => {
+      try {
+        // Store the raw data
+        req.rawBody = data;
+        
+        // Try to sanitize the data
+        if (data && data.trim().length > 0) {
+          const sanitized = sanitizeJsonString(data);
+          
+          // Set a flag to indicate we've already processed the body
+          req.bodySanitized = true;
+          
+          // Try to parse it to JSON
+          try {
+            const jsonData = JSON.parse(sanitized);
+            req.body = jsonData;
+          } catch (err) {
+            // If parsing fails, we'll let express handle it
+            console.error('Failed to parse sanitized JSON:', err.message);
+          }
+        }
+        
+        next();
+      } catch (err) {
+        console.error('Error in sanitization middleware:', err);
+        next(err);
+      }
+    });
+    
+    req.on('error', err => {
+      console.error('Error reading request stream:', err);
+      next(err);
+    });
+  } else {
+    // For non-JSON or GET requests, just pass through
+    next();
   }
-  
-  next(err);
 }
 
+// Export the utility functions
 module.exports = {
   sanitizeJsonString,
-  captureRawBody,
-  handleJsonParsingErrors
+  sanitizeRequestBody
 };
