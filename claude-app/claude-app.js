@@ -6,6 +6,7 @@
 require('dotenv').config();
 const express = require('express');
 const ClaudeMCPIntegration = require('./claude-mcp-integration');
+const { sanitizeRequestBody, sanitizeJsonString } = require('./sanitize-request');
 
 // Create express app
 const app = express();
@@ -18,6 +19,21 @@ const jsonErrorHandler = (err, req, res, next) => {
     console.error('Received payload:', req.body);
     console.error('Raw body:', req.rawBody);
     
+    // Try to fix the JSON if it's a single-quotes issue
+    if (req.rawBody) {
+      try {
+        const sanitized = sanitizeJsonString(req.rawBody);
+        const data = JSON.parse(sanitized);
+        
+        // If we successfully parsed it, handle the request with the sanitized data
+        req.body = data;
+        console.log('Successfully sanitized malformed JSON');
+        return next();
+      } catch (e) {
+        console.error('Failed to sanitize JSON:', e.message);
+      }
+    }
+    
     return res.status(400).json({ 
       error: 'Invalid JSON in request body',
       details: err.message,
@@ -29,6 +45,9 @@ const jsonErrorHandler = (err, req, res, next) => {
 };
 
 // Configure middleware
+// Add our request sanitizer before the JSON parser
+app.use(sanitizeRequestBody);
+
 // Save raw body for debugging
 app.use(express.json({
   verify: (req, res, buf) => {
@@ -51,8 +70,27 @@ const claudeFunctions = claudeMcpIntegration.createClaudeFunctions();
 app.post('/api/debug', (req, res) => {
   res.json({
     message: 'JSON received and parsed successfully',
-    receivedData: req.body
+    receivedData: req.body,
+    rawBody: req.rawBody
   });
+});
+
+// Claude messages endpoint (specifically to handle Anthropic API format)
+app.post('/api/messages', (req, res) => {
+  console.log('Received messages request:', JSON.stringify(req.body, null, 2));
+  
+  // Check if we have a 'messages' field
+  if (req.body && req.body.messages) {
+    res.json({
+      message: 'Messages received successfully',
+      messageCount: req.body.messages.length
+    });
+  } else {
+    res.status(400).json({
+      error: 'Invalid message format',
+      help: 'Request should include a "messages" array'
+    });
+  }
 });
 
 // API endpoints
@@ -122,6 +160,8 @@ app.use((err, req, res, next) => {
 // Start the server
 app.listen(PORT, () => {
   console.log(`Claude MCP integration server running on port ${PORT}`);
+  console.log(`API endpoints available at: http://localhost:${PORT}/api/`);
+  console.log(`Health check available at: http://localhost:${PORT}/health`);
 });
 
 // Export for testing purposes
