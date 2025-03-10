@@ -11,8 +11,31 @@ const ClaudeMCPIntegration = require('./claude-mcp-integration');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// Custom middleware to handle JSON parsing errors
+const jsonErrorHandler = (err, req, res, next) => {
+  if (err instanceof SyntaxError && err.status === 400 && 'body' in err) {
+    console.error('JSON Parse Error:', err.message);
+    console.error('Received payload:', req.body);
+    console.error('Raw body:', req.rawBody);
+    
+    return res.status(400).json({ 
+      error: 'Invalid JSON in request body',
+      details: err.message,
+      help: 'Ensure all quotes are double quotes (") not single quotes (\') and all property names are quoted'
+    });
+  }
+  
+  next(err);
+};
+
 // Configure middleware
-app.use(express.json());
+// Save raw body for debugging
+app.use(express.json({
+  verify: (req, res, buf) => {
+    req.rawBody = buf.toString();
+  }
+}));
+app.use(jsonErrorHandler);
 
 // Initialize the Claude MCP integration
 const claudeMcpIntegration = new ClaudeMCPIntegration({
@@ -24,12 +47,24 @@ const claudeMcpIntegration = new ClaudeMCPIntegration({
 // Create Claude functions for Graph API
 const claudeFunctions = claudeMcpIntegration.createClaudeFunctions();
 
+// Debug endpoint to check JSON format
+app.post('/api/debug', (req, res) => {
+  res.json({
+    message: 'JSON received and parsed successfully',
+    receivedData: req.body
+  });
+});
+
 // API endpoints
 app.post('/api/graph-query', async (req, res) => {
   try {
+    // Log request for debugging
+    console.log('Received graph-query request:', JSON.stringify(req.body, null, 2));
+    
     const result = await claudeFunctions.graphQuery(req.body);
     res.json(result);
   } catch (error) {
+    console.error('Error in graph-query endpoint:', error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -73,6 +108,15 @@ app.patch('/api/users/:userId', async (req, res) => {
 // Health check endpoint
 app.get('/health', (req, res) => {
   res.json({ status: 'ok', message: 'Claude MCP integration is running' });
+});
+
+// Global error handler
+app.use((err, req, res, next) => {
+  console.error('Unhandled error:', err);
+  res.status(500).json({ 
+    error: 'Internal server error',
+    message: err.message
+  });
 });
 
 // Start the server
