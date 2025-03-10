@@ -64,15 +64,23 @@ app.use((req, res, next) => {
 // Add the JSON error handler
 app.use(jsonErrorHandler);
 
+// Log all environment variables for debugging (except secrets)
+console.log('Environment Configuration:');
+console.log(`- PORT: ${process.env.PORT || 3000}`);
+console.log(`- MCP_SERVER_URL: ${process.env.MCP_SERVER_URL || 'http://localhost:3000'}`);
+console.log(`- MCP_USER_ID: ${process.env.MCP_USER_ID || 'default-user'}`);
+console.log(`- API_KEY: ${process.env.API_KEY ? '[SET]' : '[NOT SET]'}`);
+console.log(`- ANTHROPIC_API_KEY: ${process.env.ANTHROPIC_API_KEY ? '[SET]' : '[NOT SET]'}`);
+
 // Initialize the Claude MCP integration
 const claudeMcpIntegration = new ClaudeMCPIntegration({
-  mcpServerUrl: process.env.MCP_SERVER_URL || 'http://localhost:5000',
+  mcpServerUrl: process.env.MCP_SERVER_URL || 'http://localhost:3000',
   apiKey: process.env.API_KEY,
-  userId: process.env.USER_ID || 'default-user'
+  userId: process.env.MCP_USER_ID || 'default-user'
 });
 
 // Create Claude functions for Graph API
-const claudeFunctions = claudeMcpIntegration.createClaudeFunctions();
+const claudeFunctions = integration.createClaudeFunctions();
 
 // Debug endpoint to check JSON format
 app.post('/api/debug', (req, res) => {
@@ -83,17 +91,143 @@ app.post('/api/debug', (req, res) => {
   });
 });
 
+// Process user message and return graph data
+app.post('/api/process-message', async (req, res) => {
+  console.log('Received process-message request with body:', JSON.stringify(req.body, null, 2));
+  
+  // Check if we have a valid message
+  if (!req.body || !req.body.messages || !Array.isArray(req.body.messages)) {
+    return res.status(400).json({
+      error: 'Invalid request format',
+      help: 'Request should include a "messages" array'
+    });
+  }
+  
+  try {
+    // Extract user message from the messages array
+    const userMessage = req.body.messages.find(msg => msg.role === 'user');
+    if (!userMessage) {
+      return res.status(400).json({
+        error: 'No user message found',
+        help: 'The messages array must contain at least one message with role "user"'
+      });
+    }
+    
+    console.log('User content:', userMessage.content);
+    
+    // Simplified logic to detect graph queries
+    // In a real system, you'd use Claude to interpret the query
+    const content = userMessage.content.toLowerCase();
+    
+    let result = null;
+    
+    if (content.includes('user') || content.includes('people')) {
+      // Get users info
+      console.log('Detected user query, fetching users from Graph API');
+      try {
+        result = await claudeFunctions.getUsers({
+          queryParams: {
+            '$top': 5,
+            '$select': 'displayName,mail,jobTitle'
+          }
+        });
+        console.log('Graph API response:', JSON.stringify(result, null, 2));
+      } catch (graphError) {
+        console.error('Error fetching from Graph API:', graphError);
+        result = { error: graphError.message };
+      }
+    } else if (content.includes('group')) {
+      // Get groups info
+      console.log('Detected group query, fetching groups from Graph API');
+      try {
+        result = await claudeFunctions.getGroups({
+          queryParams: {
+            '$top': 5
+          }
+        });
+        console.log('Graph API response:', JSON.stringify(result, null, 2));
+      } catch (graphError) {
+        console.error('Error fetching from Graph API:', graphError);
+        result = { error: graphError.message };
+      }
+    } else {
+      // Generic response if no specific query detected
+      result = { message: 'No specific graph query detected in the user message' };
+    }
+    
+    // Return the result
+    res.json({
+      result: result,
+      original_message: userMessage.content
+    });
+  } catch (error) {
+    console.error('Error processing message:', error);
+    res.status(500).json({ error: 'Error processing message', details: error.message });
+  }
+});
+
 // Claude messages endpoint (specifically to handle Anthropic API format)
-app.post('/api/messages', (req, res) => {
+app.post('/api/messages', async (req, res) => {
   console.log('Received messages request with body type:', typeof req.body);
   
   // Check if we have a 'messages' field
   if (req.body && req.body.messages) {
     console.log('Messages received:', JSON.stringify(req.body.messages, null, 2));
-    res.json({
-      message: 'Messages received successfully',
-      messageCount: req.body.messages.length
-    });
+    
+    // Extract question from the user message
+    const userMessages = req.body.messages.filter(msg => msg.role === 'user');
+    if (userMessages.length > 0) {
+      const userQuery = userMessages[userMessages.length - 1].content;
+      console.log('Processing user query:', userQuery);
+      
+      // Try to get data from Graph API based on the query
+      try {
+        let result;
+        if (userQuery.toLowerCase().includes('user')) {
+          console.log('Detected user query, fetching from Graph API...');
+          result = await claudeFunctions.getUsers({
+            queryParams: {
+              '$top': 5,
+              '$select': 'displayName,mail,jobTitle'
+            }
+          });
+        } else {
+          console.log('No specific entity type detected, using generic graph query');
+          result = await claudeFunctions.graphQuery({
+            endpoint: '/users',
+            method: 'GET',
+            queryParams: {
+              '$top': 5
+            }
+          });
+        }
+        
+        console.log('Graph API result:', result ? 'Data received' : 'No data');
+        console.log('MCP server response:', JSON.stringify(result, null, 2));
+        
+        if (!result) {
+          console.log('No results from MCP server');
+        }
+        
+        res.json({
+          message: 'Messages processed successfully',
+          graphData: result || { message: 'No data returned from Graph API' },
+          messageCount: req.body.messages.length
+        });
+      } catch (error) {
+        console.error('Error fetching from Graph API:', error);
+        res.json({
+          message: 'Messages received but Graph API query failed',
+          error: error.message,
+          messageCount: req.body.messages.length
+        });
+      }
+    } else {
+      res.json({
+        message: 'Messages received successfully, but no user message found',
+        messageCount: req.body.messages.length
+      });
+    }
   } else {
     console.error('Invalid message format. Body:', JSON.stringify(req.body, null, 2));
     res.status(400).json({
@@ -155,7 +289,14 @@ app.patch('/api/users/:userId', async (req, res) => {
 
 // Health check endpoint
 app.get('/health', (req, res) => {
-  res.json({ status: 'ok', message: 'Claude MCP integration is running' });
+  res.json({ 
+    status: 'ok', 
+    message: 'Claude MCP integration is running',
+    config: {
+      mcp_server_url: process.env.MCP_SERVER_URL || 'http://localhost:3000',
+      port: PORT
+    }
+  });
 });
 
 // Global error handler
