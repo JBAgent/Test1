@@ -5,12 +5,17 @@
 
 require('dotenv').config();
 const express = require('express');
+const cors = require('cors');
 const ClaudeMCPIntegration = require('./claude-mcp-integration');
 const { sanitizeRequestBody, sanitizeJsonString } = require('./sanitize-request');
+const { toolSchema, processToolCall, generateToolResponse } = require('./tool-protocol');
 
 // Create express app
 const app = express();
 const PORT = process.env.PORT || 3000;
+
+// Enable CORS for all routes
+app.use(cors());
 
 // Custom middleware to handle JSON parsing errors
 const jsonErrorHandler = (err, req, res, next) => {
@@ -89,6 +94,150 @@ app.post('/api/debug', (req, res) => {
     receivedData: req.body,
     rawBody: req.rawBody || 'Not available'
   });
+});
+
+// Tool specification endpoint - returns the tool schema for Claude to use
+app.get('/.well-known/ai-plugin.json', (req, res) => {
+  res.json({
+    schema_version: "v1",
+    name_for_human: "Microsoft Graph API Tool",
+    name_for_model: "graph_api",
+    description_for_human: "Access organization data through Microsoft Graph API.",
+    description_for_model: "This tool enables querying Microsoft Graph API for organizational data including users, groups, and other entities.",
+    auth: {
+      type: "none"
+    },
+    api: {
+      type: "openapi",
+      url: `http://localhost:${PORT}/.well-known/openapi.yaml`
+    },
+    logo_url: `http://localhost:${PORT}/logo.png`,
+    contact_email: "support@example.com",
+    legal_info_url: "http://example.com/legal"
+  });
+});
+
+// OpenAPI specification
+app.get('/.well-known/openapi.yaml', (req, res) => {
+  res.type('text/yaml').send(`
+openapi: 3.0.1
+info:
+  title: Microsoft Graph API Tool
+  description: A tool to query Microsoft Graph API for organizational data
+  version: "v1"
+servers:
+  - url: http://localhost:${PORT}
+paths:
+  /api/tools:
+    post:
+      operationId: query_graph_api
+      summary: Query Microsoft Graph API
+      description: Retrieve organizational data like users, groups, and other entities
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ToolCallRequest'
+      responses:
+        "200":
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ToolCallResponse'
+components:
+  schemas:
+    ToolCallRequest:
+      type: object
+      required:
+        - name
+        - arguments
+      properties:
+        name:
+          type: string
+          enum: [query_graph_api]
+        arguments:
+          type: object
+          required:
+            - entity_type
+            - query_type
+          properties:
+            entity_type:
+              type: string
+              enum: [users, groups, sites, teams]
+            query_type:
+              type: string
+              enum: [list, search, get, count]
+            limit:
+              type: integer
+              default: 5
+            filter:
+              type: string
+            select:
+              type: string
+            search:
+              type: string
+    ToolCallResponse:
+      type: object
+      properties:
+        result:
+          type: object
+        error:
+          type: string
+  `);
+});
+
+// Serve a simple placeholder logo
+app.get('/logo.png', (req, res) => {
+  // This is a hardcoded 1x1 transparent PNG
+  const logoPng = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=', 'base64');
+  res.type('image/png').send(logoPng);
+});
+
+// Handle Claude tool protocol requests
+app.post('/api/tools', async (req, res) => {
+  console.log('Received tool request:', JSON.stringify(req.body, null, 2));
+  
+  try {
+    // Check if this is a proper tool call
+    if (!req.body || !req.body.name || !req.body.arguments) {
+      return res.status(400).json({
+        error: 'Invalid tool call format',
+        help: 'Request should include name and arguments fields'
+      });
+    }
+    
+    // Process the tool call
+    const toolCall = {
+      id: req.body.id || 'tool-call-1',
+      function: {
+        name: req.body.name,
+        arguments: JSON.stringify(req.body.arguments)
+      }
+    };
+    
+    const result = await processToolCall(toolCall, claudeFunctions);
+    
+    // Return the result
+    res.json({
+      result: result
+    });
+  } catch (error) {
+    console.error('Error processing tool call:', error);
+    res.status(500).json({
+      error: error.message,
+      fallback_data: {
+        message: "An error occurred while processing your request",
+        sample_data: {
+          users: [
+            { id: "user1", displayName: "John Doe", mail: "john.doe@example.com", jobTitle: "Software Engineer" },
+            { id: "user2", displayName: "Jane Smith", mail: "jane.smith@example.com", jobTitle: "Product Manager" }
+          ]
+        }
+      }
+    });
+  }
 });
 
 // Process user message and return graph data
@@ -318,6 +467,8 @@ app.get('/health', (req, res) => {
   res.json({ 
     status: 'ok', 
     message: 'Claude MCP integration is running',
+    version: '1.1.0',
+    features: ['message-api', 'tool-protocol', 'openapi'],
     config: {
       mcp_server_url: process.env.MCP_SERVER_URL || 'http://localhost:3000',
       port: PORT
@@ -339,6 +490,13 @@ app.get('/api/test-data', (req, res) => {
   });
 });
 
+// Tool schema endpoint for Claude to discover capabilities
+app.get('/api/tool-schema', (req, res) => {
+  res.json({
+    tools: [toolSchema]
+  });
+});
+
 // Global error handler
 app.use((err, req, res, next) => {
   console.error('Unhandled error:', err);
@@ -352,6 +510,9 @@ app.use((err, req, res, next) => {
 app.listen(PORT, () => {
   console.log(`Claude MCP integration server running on port ${PORT}`);
   console.log(`API endpoints available at: http://localhost:${PORT}/api/`);
+  console.log(`Tool schema available at: http://localhost:${PORT}/api/tool-schema`);
+  console.log(`OpenAPI spec available at: http://localhost:${PORT}/.well-known/openapi.yaml`);
+  console.log(`AI plugin manifest at: http://localhost:${PORT}/.well-known/ai-plugin.json`);
   console.log(`Health check available at: http://localhost:${PORT}/health`);
 });
 
