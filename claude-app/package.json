@@ -1,15 +1,18 @@
 {
   "name": "claude-mcp-integration",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Claude integration with MCP server for Microsoft Graph API",
   "main": "claude-app.js",
   "scripts": {
     "start": "node claude-app.js",
     "dev": "nodemon claude-app.js",
+    "check-env": "node check-env.js",
+    "test-without-mcp": "node test-without-mcp.js",
     "test": "jest"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.14.0",
+    "cors": "^2.8.5",
     "dotenv": "^16.0.1",
     "express": "^4.18.1",
     "node-fetch": "^2.6.7"
