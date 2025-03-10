@@ -1,0 +1,102 @@
+{
+  "tool_manifest": {
+    "name_for_human": "Microsoft Graph API Tool",
+    "name_for_model": "graph_api_tool",
+    "description_for_human": "Access organizational data through Microsoft Graph API.",
+    "description_for_model": "This tool enables querying Microsoft Graph API for organizational data including users, groups, and other entities. Use it when the user asks about people, teams, or other organizational information.",
+    "tool_auth": {
+      "type": "none"
+    },
+    "tools": [
+      {
+        "type": "function",
+        "function": {
+          "name": "query_graph_api",
+          "description": "Query Microsoft Graph API for organizational data",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "entity_type": {
+                "type": "string",
+                "enum": ["users", "groups", "sites", "teams"],
+                "description": "The type of entity to query"
+              },
+              "query_type": {
+                "type": "string",
+                "enum": ["list", "search", "get", "count"],
+                "description": "The type of query to perform"
+              },
+              "limit": {
+                "type": "integer",
+                "description": "Maximum number of results to return",
+                "default": 5
+              },
+              "filter": {
+                "type": "string",
+                "description": "OData filter expression",
+                "default": ""
+              },
+              "select": {
+                "type": "string",
+                "description": "Comma-separated list of properties to include",
+                "default": ""
+              },
+              "search": {
+                "type": "string",
+                "description": "Search term for finding specific entities",
+                "default": ""
+              }
+            },
+            "required": ["entity_type", "query_type"]
+          }
+        }
+      }
+    ],
+    "api": {
+      "type": "http",
+      "url": "http://localhost:4000/api/tools"
+    },
+    "logo_url": "http://localhost:4000/logo.png",
+    "contact_email": "support@example.com",
+    "legal_info_url": "http://example.com/legal"
+  },
+  "allowed_origins": [
+    "http://localhost:4000",
+    "https://localhost:4000"
+  ],
+  "authentication": {
+    "type": "none"
+  },
+  "endpoints": {
+    "query_graph_api": {
+      "url": "http://localhost:4000/api/tools",
+      "method": "POST",
+      "headers": {
+        "Content-Type": "application/json"
+      }
+    }
+  },
+  "setup": {
+    "required_environment_vars": [
+      "MCP_SERVER_URL",
+      "MCP_USER_ID"
+    ],
+    "server_config": {
+      "host": "localhost",
+      "port": 4000
+    }
+  },
+  "fallback": {
+    "enabled": true,
+    "sample_data": {
+      "users": [
+        { "id": "user1", "displayName": "John Doe", "mail": "john.doe@example.com", "jobTitle": "Software Engineer" },
+        { "id": "user2", "displayName": "Jane Smith", "mail": "jane.smith@example.com", "jobTitle": "Product Manager" }
+      ],
+      "groups": [
+        { "id": "group1", "displayName": "Engineering Team", "description": "Software development team" },
+        { "id": "group2", "displayName": "Marketing Team", "description": "Marketing and communications team" }
+      ]
+    }
+  }
+}
