@@ -100,67 +100,67 @@ function sanitizeJsonString(input) {
 }
 
 /**
- * Express middleware to sanitize request bodies before JSON parsing
+ * Simple middleware that captures raw request body for debugging
  */
-function sanitizeRequestBody(req, res, next) {
+function captureRawBody(req, res, next) {
   let data = '';
-  
-  // Store the original data listener
-  const originalListener = req.listeners('data')[0];
-  // Remove the original data listener
-  req.removeListener('data', originalListener);
-  
-  // Add our custom data listener
   req.on('data', chunk => {
     data += chunk;
   });
   
-  // Store the original end listener
-  const originalEndListener = req.listeners('end')[0];
-  // Remove the original end listener
-  req.removeListener('end', originalEndListener);
-  
-  // Add our custom end listener
   req.on('end', () => {
-    // Store the raw body for debugging
     req.rawBody = data;
     
-    // Attempt to sanitize the data
-    if (data && data.length > 0) {
+    // If it looks like JSON with single quotes, try to sanitize it
+    if (req.rawBody && 
+        (req.rawBody.trim().startsWith("{") || 
+         req.rawBody.trim().startsWith("'{"))) {
       try {
-        const sanitized = sanitizeJsonString(data);
-        // Create a new readable stream with the sanitized data
-        const newStream = new (require('stream').Readable)();
-        newStream.push(sanitized);
-        newStream.push(null);
-        
-        // Restore the original data listener on the new stream
-        newStream.on('data', originalListener.bind(req));
-        // Restore the original end listener on the new stream
-        newStream.on('end', originalEndListener.bind(req));
-        
-        // Trigger the data event on the new stream
-        newStream.resume();
+        const sanitized = sanitizeJsonString(req.rawBody);
+        req.sanitizedBody = sanitized;
       } catch (e) {
-        // If something goes wrong during sanitization, just use the original data
-        console.error('Error in sanitization:', e);
-        const newStream = new (require('stream').Readable)();
-        newStream.push(data);
-        newStream.push(null);
-        
-        newStream.on('data', originalListener.bind(req));
-        newStream.on('end', originalEndListener.bind(req));
-        
-        newStream.resume();
+        console.error('Failed to pre-sanitize body:', e.message);
       }
-    } else {
-      // If there's no data, just call the original end listener
-      originalEndListener.call(req);
     }
+    next();
   });
+}
+
+/**
+ * Express middleware to handle JSON parsing errors by attempting to sanitize the JSON
+ */
+function handleJsonParsingErrors(err, req, res, next) {
+  if (err instanceof SyntaxError && err.status === 400 && 'body' in err) {
+    console.error('JSON Parse Error:', err.message);
+    console.error('Raw body:', req.rawBody);
+    
+    // Try to sanitize the raw body
+    if (req.rawBody) {
+      try {
+        const sanitized = sanitizeJsonString(req.rawBody);
+        const data = JSON.parse(sanitized);
+        
+        // If we successfully parsed it, attach it to the request and continue
+        req.body = data;
+        console.log('Successfully sanitized malformed JSON');
+        return next();
+      } catch (e) {
+        console.error('Failed to sanitize JSON:', e.message);
+      }
+    }
+    
+    return res.status(400).json({ 
+      error: 'Invalid JSON in request body',
+      details: err.message,
+      help: 'Ensure all quotes are double quotes (") not single quotes (\') and all property names are quoted'
+    });
+  }
+  
+  next(err);
 }
 
 module.exports = {
   sanitizeJsonString,
-  sanitizeRequestBody
+  captureRawBody,
+  handleJsonParsingErrors
 };
