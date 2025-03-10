@@ -6,29 +6,63 @@
 require('dotenv').config();
 const express = require('express');
 const ClaudeMCPIntegration = require('./claude-mcp-integration');
-const { captureRawBody, handleJsonParsingErrors } = require('./sanitize-request');
+const { sanitizeRequestBody, sanitizeJsonString } = require('./sanitize-request');
 
 // Create express app
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Configure middleware
-// Add our raw body capture middleware before the JSON parser
-app.use(captureRawBody);
-
-// Configure JSON parsing with verification
-app.use(express.json({
-  verify: (req, res, buf) => {
-    // We already have the raw body from our middleware, but this
-    // makes it available for the built-in parser as well
-    if (!req.rawBody) {
-      req.rawBody = buf.toString();
+// Custom middleware to handle JSON parsing errors
+const jsonErrorHandler = (err, req, res, next) => {
+  if (err instanceof SyntaxError && err.status === 400 && 'body' in err) {
+    console.error('JSON Parse Error:', err.message);
+    console.error('Received payload:', req.body);
+    console.error('Raw body:', req.rawBody);
+    
+    // Try to fix the JSON if it's a single-quotes issue
+    if (req.rawBody) {
+      try {
+        const sanitized = sanitizeJsonString(req.rawBody);
+        const data = JSON.parse(sanitized);
+        
+        // If we successfully parsed it, handle the request with the sanitized data
+        req.body = data;
+        console.log('Successfully sanitized malformed JSON');
+        return next();
+      } catch (e) {
+        console.error('Failed to sanitize JSON:', e.message);
+      }
     }
+    
+    return res.status(400).json({ 
+      error: 'Invalid JSON in request body',
+      details: err.message,
+      help: 'Ensure all quotes are double quotes (") not single quotes (\') and all property names are quoted'
+    });
   }
-}));
+  
+  next(err);
+};
 
-// Add JSON error handling middleware
-app.use(handleJsonParsingErrors);
+// Configure middleware
+// First add our custom sanitizer
+app.use(sanitizeRequestBody);
+
+// Only if the body hasn't been sanitized already, use express.json parser
+app.use((req, res, next) => {
+  if (!req.bodySanitized) {
+    express.json({
+      verify: (req, res, buf) => {
+        req.rawBody = buf.toString();
+      }
+    })(req, res, next);
+  } else {
+    next();
+  }
+});
+
+// Add the JSON error handler
+app.use(jsonErrorHandler);
 
 // Initialize the Claude MCP integration
 const claudeMcpIntegration = new ClaudeMCPIntegration({
@@ -45,21 +79,23 @@ app.post('/api/debug', (req, res) => {
   res.json({
     message: 'JSON received and parsed successfully',
     receivedData: req.body,
-    rawBody: req.rawBody
+    rawBody: req.rawBody || 'Not available'
   });
 });
 
 // Claude messages endpoint (specifically to handle Anthropic API format)
 app.post('/api/messages', (req, res) => {
-  console.log('Received messages request:', JSON.stringify(req.body, null, 2));
+  console.log('Received messages request with body type:', typeof req.body);
   
   // Check if we have a 'messages' field
   if (req.body && req.body.messages) {
+    console.log('Messages received:', JSON.stringify(req.body.messages, null, 2));
     res.json({
       message: 'Messages received successfully',
       messageCount: req.body.messages.length
     });
   } else {
+    console.error('Invalid message format. Body:', JSON.stringify(req.body, null, 2));
     res.status(400).json({
       error: 'Invalid message format',
       help: 'Request should include a "messages" array'
