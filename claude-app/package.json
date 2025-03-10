@@ -2,10 +2,10 @@
   "name": "claude-mcp-integration",
   "version": "1.0.0",
   "description": "Claude integration with MCP server for Microsoft Graph API",
-  "main": "claude-mcp-integration.js",
+  "main": "claude-app.js",
   "scripts": {
-    "start": "node claude-mcp-integration.js",
-    "dev": "nodemon claude-mcp-integration.js",
+    "start": "node claude-app.js",
+    "dev": "nodemon claude-app.js",
     "test": "jest"
   },
   "dependencies": {
