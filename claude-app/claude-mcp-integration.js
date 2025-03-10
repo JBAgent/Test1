@@ -18,6 +18,9 @@ class ClaudeMCPIntegration {
     this.mcpServerUrl = config.mcpServerUrl;
     this.apiKey = config.apiKey;
     this.userId = config.userId;
+    
+    console.log(`ClaudeMCPIntegration initialized with MCP server URL: ${this.mcpServerUrl}`);
+    console.log(`Using User ID: ${this.userId}`);
   }
 
   /**
@@ -27,6 +30,17 @@ class ClaudeMCPIntegration {
    */
   async makeGraphRequest(graphOptions) {
     try {
+      console.log(`Making Graph API request to MCP server: ${this.mcpServerUrl}/api/graph`);
+      console.log(`Request options: ${JSON.stringify(graphOptions, null, 2)}`);
+      
+      // Ensure endpoint starts with /
+      if (graphOptions.endpoint && !graphOptions.endpoint.startsWith('/')) {
+        graphOptions.endpoint = '/' + graphOptions.endpoint;
+      }
+
+      const requestBody = JSON.stringify(graphOptions);
+      console.log(`Request body: ${requestBody}`);
+      
       const response = await fetch(`${this.mcpServerUrl}/api/graph`, {
         method: 'POST',
         headers: {
@@ -34,15 +48,31 @@ class ClaudeMCPIntegration {
           'X-User-ID': this.userId,
           'X-API-Key': this.apiKey || ''
         },
-        body: JSON.stringify(graphOptions)
+        body: requestBody
       });
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(`MCP Server Error: ${errorData.message || response.statusText}`);
+      console.log(`Response status: ${response.status}`);
+      
+      // Get the raw response body
+      const responseText = await response.text();
+      console.log(`Raw response: ${responseText}`);
+      
+      // Parse the response if it's JSON
+      let responseData;
+      try {
+        responseData = JSON.parse(responseText);
+      } catch (parseError) {
+        console.error(`Failed to parse response as JSON: ${parseError.message}`);
+        throw new Error(`Failed to parse MCP server response: ${responseText}`);
       }
 
-      return await response.json();
+      if (!response.ok) {
+        console.error(`MCP Server Error: ${JSON.stringify(responseData)}`);
+        throw new Error(`MCP Server Error (${response.status}): ${responseData.message || responseData.error || response.statusText}`);
+      }
+
+      console.log(`Successfully received response from MCP server`);
+      return responseData;
     } catch (error) {
       console.error('Error connecting to MCP server:', error);
       throw error;
@@ -63,6 +93,7 @@ class ClaudeMCPIntegration {
        * @returns {Promise<Object>} - Graph API response
        */
       graphQuery: async function(options) {
+        console.log(`graphQuery called with options: ${JSON.stringify(options, null, 2)}`);
         return await self.makeGraphRequest(options);
       },
       
@@ -72,6 +103,7 @@ class ClaudeMCPIntegration {
        * @returns {Promise<Object>} - User data
        */
       getUsers: async function(options = {}) {
+        console.log(`getUsers called with options: ${JSON.stringify(options, null, 2)}`);
         return await self.makeGraphRequest({
           endpoint: '/users',
           method: 'GET',
@@ -87,6 +119,7 @@ class ClaudeMCPIntegration {
        * @returns {Promise<Object>} - Group data
        */
       getGroups: async function(options = {}) {
+        console.log(`getGroups called with options: ${JSON.stringify(options, null, 2)}`);
         return await self.makeGraphRequest({
           endpoint: '/groups',
           method: 'GET',
@@ -102,6 +135,7 @@ class ClaudeMCPIntegration {
        * @returns {Promise<Object>} - Created user
        */
       createUser: async function(userData) {
+        console.log(`createUser called with data: ${JSON.stringify(userData, null, 2)}`);
         return await self.makeGraphRequest({
           endpoint: '/users',
           method: 'POST',
@@ -117,6 +151,7 @@ class ClaudeMCPIntegration {
        * @returns {Promise<Object>} - Updated user
        */
       updateUser: async function(userId, userData) {
+        console.log(`updateUser called for user ${userId} with data: ${JSON.stringify(userData, null, 2)}`);
         return await self.makeGraphRequest({
           endpoint: `/users/${userId}`,
           method: 'PATCH',
