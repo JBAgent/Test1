@@ -6,55 +6,29 @@
 require('dotenv').config();
 const express = require('express');
 const ClaudeMCPIntegration = require('./claude-mcp-integration');
-const { sanitizeRequestBody, sanitizeJsonString } = require('./sanitize-request');
+const { captureRawBody, handleJsonParsingErrors } = require('./sanitize-request');
 
 // Create express app
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Custom middleware to handle JSON parsing errors
-const jsonErrorHandler = (err, req, res, next) => {
-  if (err instanceof SyntaxError && err.status === 400 && 'body' in err) {
-    console.error('JSON Parse Error:', err.message);
-    console.error('Received payload:', req.body);
-    console.error('Raw body:', req.rawBody);
-    
-    // Try to fix the JSON if it's a single-quotes issue
-    if (req.rawBody) {
-      try {
-        const sanitized = sanitizeJsonString(req.rawBody);
-        const data = JSON.parse(sanitized);
-        
-        // If we successfully parsed it, handle the request with the sanitized data
-        req.body = data;
-        console.log('Successfully sanitized malformed JSON');
-        return next();
-      } catch (e) {
-        console.error('Failed to sanitize JSON:', e.message);
-      }
-    }
-    
-    return res.status(400).json({ 
-      error: 'Invalid JSON in request body',
-      details: err.message,
-      help: 'Ensure all quotes are double quotes (") not single quotes (\') and all property names are quoted'
-    });
-  }
-  
-  next(err);
-};
-
 // Configure middleware
-// Add our request sanitizer before the JSON parser
-app.use(sanitizeRequestBody);
+// Add our raw body capture middleware before the JSON parser
+app.use(captureRawBody);
 
-// Save raw body for debugging
+// Configure JSON parsing with verification
 app.use(express.json({
   verify: (req, res, buf) => {
-    req.rawBody = buf.toString();
+    // We already have the raw body from our middleware, but this
+    // makes it available for the built-in parser as well
+    if (!req.rawBody) {
+      req.rawBody = buf.toString();
+    }
   }
 }));
-app.use(jsonErrorHandler);
+
+// Add JSON error handling middleware
+app.use(handleJsonParsingErrors);
 
 // Initialize the Claude MCP integration
 const claudeMcpIntegration = new ClaudeMCPIntegration({
